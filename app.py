@@ -2,21 +2,73 @@ from flask import Flask, request, jsonify, send_file, send_from_directory
 from flask_cors import CORS
 import speech_recognition as sr
 from gtts import gTTS
-from googletrans import Translator
+from googletrans import Translator, LANGUAGES
 import tempfile
 import subprocess
 import os
 import io
 import base64
+import time
+from requests.exceptions import RequestException
 
 # Initialize Flask app with correct static folder and template settings
 app = Flask(__name__, static_folder='static', template_folder='.')
 CORS(app)
 
-@app.route('/')
-def home():
-    return send_from_directory('.', 'index.html')
+MAX_RETRIES = 3
+RETRY_DELAY = 1  # seconds
 
+def create_translator():
+    """Create a new translator instance with specific parameters."""
+    return Translator(service_urls=[
+        'translate.google.com',
+        'translate.google.co.kr',
+    ])
+
+def detect_language_with_retry(text, max_retries=MAX_RETRIES):
+    """Detect language with retry mechanism."""
+    for attempt in range(max_retries):
+        try:
+            translator = create_translator()
+            detection = translator.detect(text)
+            return detection.lang
+        except Exception as e:
+            if attempt == max_retries - 1:
+                print(f"Final language detection error: {e}")
+                return None
+            print(f"Language detection attempt {attempt + 1} failed: {e}")
+            time.sleep(RETRY_DELAY)
+
+def translate_text_with_retry(text, source_lang=None, target_lang='en', max_retries=MAX_RETRIES):
+    """Translate text with retry mechanism."""
+    for attempt in range(max_retries):
+        try:
+            translator = create_translator()
+            
+            # If source language is not provided, detect it
+            if not source_lang:
+                source_lang = detect_language_with_retry(text)
+                if not source_lang:
+                    raise Exception("Could not detect source language")
+
+            # Validate target language
+            if target_lang not in LANGUAGES:
+                raise ValueError(f"Unsupported target language: {target_lang}")
+
+            translation = translator.translate(text, src=source_lang, dest=target_lang)
+            return {
+                'text': translation.text,
+                'source_lang': source_lang,
+                'detected_source_lang': translation.src
+            }
+        except Exception as e:
+            if attempt == max_retries - 1:
+                print(f"Final translation error: {e}")
+                return None
+            print(f"Translation attempt {attempt + 1} failed: {e}")
+            time.sleep(RETRY_DELAY)
+
+# [Previous audio conversion functions remain the same]
 def convert_audio_to_wav(audio_data):
     """Convert audio data to WAV format using FFmpeg."""
     try:
@@ -57,16 +109,6 @@ def convert_audio_to_wav(audio_data):
             os.unlink(wav_path)
         raise
 
-def detect_language(text):
-    """Detect the language of the input text."""
-    try:
-        translator = Translator()
-        detection = translator.detect(text)
-        return detection.lang
-    except Exception as e:
-        print(f"Language detection error: {e}")
-        return None
-
 def transcribe_audio(audio_path, language=None):
     """Transcribe audio file to text with optional language hint."""
     recognizer = sr.Recognizer()
@@ -88,25 +130,6 @@ def transcribe_audio(audio_path, language=None):
         print(f"Error in transcribe_audio: {e}")
         return None
 
-def translate_text(text, source_lang=None, target_lang='en'):
-    """Translate text from source language to target language."""
-    translator = Translator()
-    try:
-        if not source_lang:
-            source_lang = detect_language(text)
-            if not source_lang:
-                raise Exception("Could not detect source language")
-
-        translation = translator.translate(text, src=source_lang, dest=target_lang)
-        return {
-            'text': translation.text,
-            'source_lang': source_lang,
-            'detected_source_lang': translation.src
-        }
-    except Exception as e:
-        print(f"Translation error: {e}")
-        return None
-
 def generate_audio(text, lang):
     """Generate audio from text in specified language."""
     try:
@@ -119,6 +142,10 @@ def generate_audio(text, lang):
     except Exception as e:
         print(f"Audio generation error: {e}")
         return None
+
+@app.route('/')
+def home():
+    return send_from_directory('.', 'index.html')
 
 @app.route('/translate', methods=['POST'])
 def translate():
@@ -142,9 +169,9 @@ def translate():
         if not original_text:
             return jsonify({'error': 'Could not transcribe audio'}), 400
 
-        translation_result = translate_text(original_text, source_lang, target_lang)
+        translation_result = translate_text_with_retry(original_text, source_lang, target_lang)
         if not translation_result:
-            return jsonify({'error': 'Could not translate text'}), 400
+            return jsonify({'error': 'Translation service error. Please try again.'}), 500
 
         audio_data = generate_audio(translation_result['text'], target_lang)
         if not audio_data:
@@ -171,21 +198,7 @@ def translate():
 @app.route('/supported_languages', methods=['GET'])
 def get_supported_languages():
     """Return a list of supported languages for translation."""
-    supported_languages = {
-        'en': 'English',
-        'es': 'Spanish',
-        'fr': 'French',
-        'de': 'German',
-        'it': 'Italian',
-        'pt': 'Portuguese',
-        'ru': 'Russian',
-        'ja': 'Japanese',
-        'ko': 'Korean',
-        'zh-cn': 'Chinese (Simplified)',
-        'ar': 'Arabic',
-        'hi': 'Hindi'
-    }
-    return jsonify(supported_languages)
+    return jsonify(LANGUAGES)
 
 if __name__ == '__main__':
     port = int(os.environ.get("PORT", 8080))
