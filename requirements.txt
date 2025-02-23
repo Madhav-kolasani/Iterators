@@ -4,6 +4,4 @@ flask-cors
 speechrecognition
 gtts
 googletrans==4.0.0-rc1
-os
-io
-base64
+
