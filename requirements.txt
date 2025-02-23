@@ -1,0 +1,11 @@
+Flask
+gunicorn
+flask-cors
+speechrecognition
+gtts
+googletrans==4.0.0-rc1
+tempfile
+subprocess
+os
+io
+base64
