@@ -14,7 +14,8 @@ CORS(app)
 
 @app.route('/')
 def home():
-    return send_file('index.html')
+    #return send_file('index.html')
+    return send_file("./templates/index.html")
 
 def convert_audio_to_wav(audio_data):
     """Convert audio data to WAV format using FFmpeg."""
