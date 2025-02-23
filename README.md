@@ -18,5 +18,5 @@
 ## Installation
 1. Clone the repository:
    ```sh
-   git clone https://github.com/your-repo/realtime-voice-translator.git
+   git clone https://github.com/Madhav-kolasani/Iterators.git
    cd realtime-voice-translator
