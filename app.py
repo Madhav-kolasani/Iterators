@@ -204,15 +204,16 @@ def get_supported_languages():
 if __name__ == '__main__':
     app.run(debug=True)
 
-import os
-from flask import Flask
 
+from flask import Flask
 app = Flask(__name__)
 
 @app.route('/')
 def home():
-    return "Flask App Deployed on Railway!"
+    return "Flask App is Running!"
 
 if __name__ == "__main__":
-    port = int(os.environ.get("PORT", 8080))  # Use PORT from Railway
-    app.run(host='0.0.0.0', port=port)
+    import os
+    port = int(os.environ.get("PORT", 8080))  # Read PORT from Railway
+    app.run(host='0.0.0.0', port=port, debug=False)  # Disable Debug mode
+
